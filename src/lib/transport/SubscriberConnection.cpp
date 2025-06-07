@@ -490,7 +490,6 @@ void SubscriberConnection::Connect(const string& hostname, const uint16_t port, 
     // this prevents destruction disconnect before connection is completed
     ScopeLock lock(m_connectActionMutex);
     DnsResolver resolver(m_commandChannelService);
-    const DnsResolver::query dnsQuery(hostname, to_string(port));
     ErrorCode error;
 
     m_stopped = false;
@@ -500,7 +499,7 @@ void SubscriberConnection::Connect(const string& hostname, const uint16_t port, 
 
     m_connector.SetConnectionRefused(false);
 
-    connect(m_commandChannelSocket, resolver.resolve(dnsQuery), error);
+    connect(m_commandChannelSocket, resolver.resolve(hostname, to_string(port)), error);
 
     if (error)
         throw SystemError(error);
@@ -904,7 +903,7 @@ void SubscriberConnection::HandleSubscribe(uint8_t* data, uint32_t length)
                     }
 
                     m_dataChannelSocket.open(protocol);
-                    m_dataChannelSocket.bind(udp::endpoint(ip::address::from_string(networkInterface), 0));
+                    m_dataChannelSocket.bind(udp::endpoint(ip::make_address(networkInterface), 0));
                     m_dataChannelSocket.connect(udp::endpoint(remoteEndPoint.address(), m_udpPort));
                     m_dataChannelActive = true;
                                 

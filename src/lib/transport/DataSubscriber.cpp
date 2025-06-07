@@ -1091,7 +1091,6 @@ void DataSubscriber::Connect(const string& hostname, const uint16_t port, const 
     // this prevents destruction disconnect before connection is completed
     ScopeLock lock(m_connectActionMutex);
     DnsResolver resolver(m_commandChannelService);
-    const DnsResolver::query dnsQuery(hostname, ToString(port));
     ErrorCode error;
 
     // Initialize connection state
@@ -1102,7 +1101,7 @@ void DataSubscriber::Connect(const string& hostname, const uint16_t port, const 
 
     m_connector.SetConnectionRefused(false);
 
-    const TcpEndPoint hostEndpoint = connect(m_commandChannelSocket, resolver.resolve(dnsQuery), error);
+    const TcpEndPoint hostEndpoint = connect(m_commandChannelSocket, resolver.resolve(hostname, ToString(port)), error);
 
     if (error)
         throw SystemError(error);

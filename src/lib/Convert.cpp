@@ -1,7 +1,7 @@
 //******************************************************************************************************
 //  Convert.cpp - Gbtc
 //
-//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright Â© 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
@@ -893,14 +893,10 @@ string sttp::ResolveDNSName(IOContext& service, const TcpEndPoint& source, strin
     try
     {
         DnsResolver resolver(service);
-        const DnsResolver::query dnsQuery(address.to_string(), port);
-        DnsResolver::iterator iterator = resolver.resolve(dnsQuery);
-        const DnsResolver::iterator end;
+        auto results = resolver.resolve(address.to_string(), port);
 
-        while (iterator != end)
+        for (const auto& endPoint : results)
         {
-            const auto& endPoint = *iterator++;
-
             if (!endPoint.host_name().empty())
             {
                 hostName = endPoint.host_name();
