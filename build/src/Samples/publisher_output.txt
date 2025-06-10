@@ -1,0 +1,6 @@
+
+Listening on port: 7165...
+
+Loaded 14 measurement metadata records for publication.
+
+Publisher stopped.
