@@ -6,5 +6,5 @@ CXX_DEFINES = -DANTLR4CPP_STATIC -DBOOST_ASIO_ENABLE_CANCELIO -DBOOST_CONFIG_SUP
 
 CXX_INCLUDES = -I/home/vaidurya/sttp/cppapi/src/lib/filterexpressions/antlr4-runtime
 
-CXX_FLAGS =  -std=c++20 -ftabstop=4 -finput-charset=UTF-8 -fextended-identifiers -Wno-attributes
+CXX_FLAGS = -Wno-unknown-pragmas -std=c++20 -ftabstop=4 -finput-charset=UTF-8 -fextended-identifiers -Wno-attributes -g -Wall
 
