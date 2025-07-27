@@ -8,7 +8,8 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/home/vaidurya/sttp/cppapi/src/samples/AverageFrequencyCalculator/AverageFrequencyCalculator.cpp" "src/CMakeFiles/AverageFrequencyCalculator.dir/samples/AverageFrequencyCalculator/AverageFrequencyCalculator.cpp.o" "gcc" "src/CMakeFiles/AverageFrequencyCalculator.dir/samples/AverageFrequencyCalculator/AverageFrequencyCalculator.cpp.o.d"
+  "/home/runner/work/cppapi/cppapi/src/samples/AverageFrequencyCalculator/AverageFrequencyCalculator.cpp" "src/CMakeFiles/AverageFrequencyCalculator.dir/samples/AverageFrequencyCalculator/AverageFrequencyCalculator.cpp.o" "gcc" "src/CMakeFiles/AverageFrequencyCalculator.dir/samples/AverageFrequencyCalculator/AverageFrequencyCalculator.cpp.o.d"
+  "" "src/Samples/AverageFrequencyCalculator" "gcc" "src/CMakeFiles/AverageFrequencyCalculator.dir/link.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

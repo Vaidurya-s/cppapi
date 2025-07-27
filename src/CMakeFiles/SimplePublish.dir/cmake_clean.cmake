@@ -1,4 +1,5 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/SimplePublish.dir/link.d"
   "CMakeFiles/SimplePublish.dir/samples/SimplePublish/SimplePublish.cpp.o"
   "CMakeFiles/SimplePublish.dir/samples/SimplePublish/SimplePublish.cpp.o.d"
   "Samples/SimplePublish"

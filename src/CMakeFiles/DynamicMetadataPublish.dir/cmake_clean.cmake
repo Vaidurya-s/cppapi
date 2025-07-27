@@ -1,4 +1,5 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/DynamicMetadataPublish.dir/link.d"
   "CMakeFiles/DynamicMetadataPublish.dir/samples/DynamicMetadataPublish/DynamicMetadataPublish.cpp.o"
   "CMakeFiles/DynamicMetadataPublish.dir/samples/DynamicMetadataPublish/DynamicMetadataPublish.cpp.o.d"
   "CMakeFiles/DynamicMetadataPublish.dir/samples/DynamicMetadataPublish/PublisherHandler.cpp.o"

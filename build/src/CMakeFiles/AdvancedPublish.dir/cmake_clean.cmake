@@ -1,4 +1,5 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/AdvancedPublish.dir/link.d"
   "CMakeFiles/AdvancedPublish.dir/samples/AdvancedPublish/AdvancedPublish.cpp.o"
   "CMakeFiles/AdvancedPublish.dir/samples/AdvancedPublish/AdvancedPublish.cpp.o.d"
   "CMakeFiles/AdvancedPublish.dir/samples/AdvancedPublish/GenHistory.cpp.o"

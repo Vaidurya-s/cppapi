@@ -12,6 +12,9 @@
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
+[Tt]mp/
+[Tt]emp/
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
@@ -329,3 +332,21 @@ ASALocalRun/
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
 /src/enc_temp_folder/
+
+# CMake build artifacts
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+Makefile
+
+# STTP specific build artifacts
+src/Libraries/
+src/Samples/
+src/Include/
+src/CMakeFiles/
+src/Makefile
+src/cmake_install.cmake

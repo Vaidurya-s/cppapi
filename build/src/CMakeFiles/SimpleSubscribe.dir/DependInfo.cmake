@@ -8,7 +8,8 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/home/vaidurya/sttp/cppapi/src/samples/SimpleSubscribe/SimpleSubscribe.cpp" "src/CMakeFiles/SimpleSubscribe.dir/samples/SimpleSubscribe/SimpleSubscribe.cpp.o" "gcc" "src/CMakeFiles/SimpleSubscribe.dir/samples/SimpleSubscribe/SimpleSubscribe.cpp.o.d"
+  "/home/runner/work/cppapi/cppapi/src/samples/SimpleSubscribe/SimpleSubscribe.cpp" "src/CMakeFiles/SimpleSubscribe.dir/samples/SimpleSubscribe/SimpleSubscribe.cpp.o" "gcc" "src/CMakeFiles/SimpleSubscribe.dir/samples/SimpleSubscribe/SimpleSubscribe.cpp.o.d"
+  "" "src/Samples/SimpleSubscribe" "gcc" "src/CMakeFiles/SimpleSubscribe.dir/link.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

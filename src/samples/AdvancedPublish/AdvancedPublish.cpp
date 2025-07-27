@@ -1,7 +1,7 @@
 //******************************************************************************************************
 //  AdvancedPublish.cpp - Gbtc
 //
-//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright ï¿½ 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
@@ -27,6 +27,9 @@
 #include "GenHistory.h"
 #include "TemporalSubscriber.h"
 #include <iostream>
+#include <chrono>
+#include <sstream>
+#include <algorithm>
 
 using namespace std;
 using namespace sttp;
@@ -43,6 +46,30 @@ vector<PhasorMetadataPtr> PhasorsToPublish;
 unordered_map<sttp::Guid, TemporalSubscriberPtr> TemporalSubscriptions;
 Mutex TemporalSubscriptionsLock;
 const TemporalSubscriberPtr NullTemporalSubscription = nullptr;
+
+// Dynamic Rate Synchronization - Publisher rate adjustment
+struct SubscriberFeedback
+{
+    size_t queueSize;
+    double processingLag;
+    string rateRecommendation;
+    uint64_t totalProcessed;
+    chrono::steady_clock::time_point lastUpdateTime;
+    
+    SubscriberFeedback() : queueSize(0), processingLag(0.0), rateRecommendation("NORMAL"), 
+                          totalProcessed(0), lastUpdateTime(chrono::steady_clock::now()) {}
+};
+
+unordered_map<string, SubscriberFeedback> subscriberFeedbackMap; // Use connection ID as key
+Mutex feedbackMapMutex;
+int32_t currentPublishInterval = 33; // Default 33ms interval
+int32_t basePublishInterval = 33;    // Base interval for scaling
+
+// Function declarations for feedback handling
+void HandleUserCommand(DataPublisher* source, const SubscriberConnectionPtr& connection, uint8_t commandCode, const vector<uint8_t>& data);
+void ProcessFeedbackMessage(const SubscriberConnectionPtr& connection, const string& feedbackData);
+void UpdatePublishingRate();
+SubscriberFeedback ParseFeedbackMessage(const string& message);
 
 bool RunPublisher(uint16_t port, bool genHistory);
 
@@ -152,6 +179,25 @@ void LoadMetadataToPublish(vector<DeviceMetadataPtr>& deviceMetadata, vector<Mea
 // measurements, i.e., PPA:1 through PPA:4
 //
 // Measurements are transmitted via the TCP command channel.
+//
+// DYNAMIC RATE SYNCHRONIZATION FEATURE:
+// =====================================
+// The publisher now implements dynamic rate synchronization with subscribers:
+// 
+// 1. Listens for feedback messages from subscribers via UserCommand01
+// 2. Aggregates feedback from all active subscribers (queue size, lag, recommendations)
+// 3. Adjusts publishing timer interval based on majority subscriber recommendations:
+//    - SLOW: Increases interval by 20% (max 500ms) when subscribers are overloaded
+//    - READY: Decreases interval by 15% (min 10ms) when subscribers can handle more
+//    - NORMAL: Gradually returns to base 33ms interval
+// 4. Logs all interval changes with subscriber statistics
+// 5. Removes stale feedback after 10 seconds of inactivity
+//
+// Usage Instructions:
+// - Run AdvancedPublish PORT (e.g., AdvancedPublish 7165)
+// - Connect multiple AdvancedSubscribe clients
+// - Observe automatic rate adjustments based on subscriber load
+// - Monitor console output for rate change notifications
 int main(int argc, char* argv[])
 {
     uint16_t port;
@@ -225,6 +271,9 @@ bool RunPublisher(const uint16_t port, const bool genHistory)
         Publisher->RegisterProcessingIntervalChangeRequestedCallback(&HandleProcessingIntervalChangeRequested);
         Publisher->RegisterTemporalSubscriptionRequestedCallback(&HandleTemporalSubscriptionRequested);
         Publisher->RegisterTemporalSubscriptionCanceledCallback(&HandleTemporalSubscriptionCanceled);
+        
+        // Dynamic Rate Synchronization: Register user command callback for feedback
+        Publisher->RegisterUserCommandCallback(&HandleUserCommand);
 
         // Enable temporal subscription support - this allows historical data requests as well as real-time
         Publisher->SetSupportsTemporalSubscriptions(true);
@@ -328,6 +377,12 @@ void DisplayClientDisconnected(DataPublisher* source, const SubscriberConnection
     message << ">> Client Disconnected:" << endl;
     message << "   Subscriber ID: " << ToString(connection->GetSubscriberID()) << endl;
     message << "   Connection ID: " << ToString(connection->GetConnectionID());
+
+    // Dynamic Rate Synchronization: Clean up feedback for disconnected client
+    {
+        lock_guard<Mutex> lock(feedbackMapMutex);
+        subscriberFeedbackMap.erase(connection->GetConnectionID());
+    }
 
     DisplayStatusMessage(source, message.str());
 }
@@ -444,4 +499,184 @@ bool RemoveTemporalSubscription(const SubscriberConnectionPtr& connection, bool&
     TemporalSubscriptionsLock.unlock();
 
     return removed;
+}
+
+// Dynamic Rate Synchronization Implementation
+// ==========================================
+
+/**
+ * Handles user commands from subscribers, including rate synchronization feedback.
+ * @param source - The DataPublisher instance
+ * @param connection - The subscriber connection sending the command
+ * @param commandCode - The command code (UserCommand01 for rate feedback)
+ * @param data - The command data payload
+ */
+void HandleUserCommand(DataPublisher* source, const SubscriberConnectionPtr& connection, uint8_t commandCode, const vector<uint8_t>& data)
+{
+    string commandData(data.begin(), data.end());
+    
+    switch (commandCode)
+    {
+        case ServerCommand::UserCommand00:
+            // Handle existing custom command (hello message)
+            cout << "Received custom command from client \"" << connection->GetConnectionID() 
+                 << "\": " << commandData << endl << endl;
+            break;
+            
+        case ServerCommand::UserCommand01:
+            // Handle rate synchronization feedback
+            ProcessFeedbackMessage(connection, commandData);
+            break;
+            
+        default:
+            cout << "Received unknown user command " << static_cast<int>(commandCode) 
+                 << " from client \"" << connection->GetConnectionID() << "\"" << endl;
+            break;
+    }
+}
+
+/**
+ * Processes feedback message from subscriber and updates rate control.
+ * @param connection - The subscriber connection providing feedback
+ * @param feedbackData - The feedback message string
+ */
+void ProcessFeedbackMessage(const SubscriberConnectionPtr& connection, const string& feedbackData)
+{
+    try
+    {
+        SubscriberFeedback feedback = ParseFeedbackMessage(feedbackData);
+        
+        {
+            lock_guard<Mutex> lock(feedbackMapMutex);
+            feedback.lastUpdateTime = chrono::steady_clock::now();
+            subscriberFeedbackMap[connection->GetConnectionID()] = feedback;
+        }
+        
+        // Update publishing rate based on aggregated feedback
+        UpdatePublishingRate();
+        
+        cout << "Processed feedback from client \"" << connection->GetConnectionID() 
+             << "\": queue=" << feedback.queueSize 
+             << ", lag=" << feedback.processingLag << "ms"
+             << ", recommendation=" << feedback.rateRecommendation << endl;
+    }
+    catch (const exception& ex)
+    {
+        cerr << "Error processing feedback from client \"" << connection->GetConnectionID() 
+             << "\": " << ex.what() << endl;
+    }
+}
+
+/**
+ * Updates the publishing rate based on aggregated feedback from all subscribers.
+ * Adjusts the timer interval to slow down or speed up based on recommendations.
+ */
+void UpdatePublishingRate()
+{
+    lock_guard<Mutex> lock(feedbackMapMutex);
+    
+    if (subscriberFeedbackMap.empty())
+        return;
+    
+    // Count recommendations from active subscribers (updated within last 10 seconds)
+    auto now = chrono::steady_clock::now();
+    int slowCount = 0, normalCount = 0, readyCount = 0;
+    int activeSubscribers = 0;
+    
+    for (auto it = subscriberFeedbackMap.begin(); it != subscriberFeedbackMap.end();)
+    {
+        auto timeSinceUpdate = chrono::duration_cast<chrono::seconds>(now - it->second.lastUpdateTime);
+        
+        if (timeSinceUpdate.count() > 10) // Remove stale feedback
+        {
+            it = subscriberFeedbackMap.erase(it);
+            continue;
+        }
+        
+        activeSubscribers++;
+        const string& recommendation = it->second.rateRecommendation;
+        
+        if (recommendation == "SLOW") slowCount++;
+        else if (recommendation == "READY") readyCount++;
+        else normalCount++;
+        
+        ++it;
+    }
+    
+    if (activeSubscribers == 0)
+        return;
+    
+    // Determine new interval based on majority recommendation
+    int32_t newInterval = currentPublishInterval;
+    
+    if (slowCount > activeSubscribers / 2)
+    {
+        // Majority wants slower rate - increase interval by 20% (max 500ms)
+        newInterval = min(500, static_cast<int32_t>(currentPublishInterval * 1.2));
+    }
+    else if (readyCount > activeSubscribers / 2)
+    {
+        // Majority ready for faster rate - decrease interval by 15% (min 10ms)
+        newInterval = max(10, static_cast<int32_t>(currentPublishInterval * 0.85));
+    }
+    else
+    {
+        // Normal or mixed feedback - gradually return to base interval
+        if (currentPublishInterval > basePublishInterval)
+            newInterval = max(basePublishInterval, static_cast<int32_t>(currentPublishInterval * 0.95));
+        else if (currentPublishInterval < basePublishInterval)
+            newInterval = min(basePublishInterval, static_cast<int32_t>(currentPublishInterval * 1.05));
+    }
+    
+    // Update interval if it changed significantly (>5ms difference)
+    if (abs(newInterval - currentPublishInterval) > 5)
+    {
+        currentPublishInterval = newInterval;
+        PublishTimer->SetInterval(currentPublishInterval);
+        
+        cout << ">> RATE ADJUSTMENT: Publishing interval changed to " << currentPublishInterval 
+             << "ms (Active subscribers: " << activeSubscribers 
+             << ", SLOW: " << slowCount << ", NORMAL: " << normalCount 
+             << ", READY: " << readyCount << ")" << endl << endl;
+    }
+}
+
+/**
+ * Parses feedback message in format: "RATE_FEEDBACK:queue_size=X,lag=Y,recommendation=Z,total_processed=W"
+ * @param message - The feedback message string
+ * @return SubscriberFeedback struct with parsed values
+ */
+SubscriberFeedback ParseFeedbackMessage(const string& message)
+{
+    SubscriberFeedback feedback;
+    
+    if (message.find("RATE_FEEDBACK:") != 0)
+        throw runtime_error("Invalid feedback message format");
+    
+    string params = message.substr(14); // Remove "RATE_FEEDBACK:" prefix
+    
+    // Parse comma-separated key=value pairs
+    stringstream ss(params);
+    string param;
+    
+    while (getline(ss, param, ','))
+    {
+        size_t equalPos = param.find('=');
+        if (equalPos == string::npos)
+            continue;
+            
+        string key = param.substr(0, equalPos);
+        string value = param.substr(equalPos + 1);
+        
+        if (key == "queue_size")
+            feedback.queueSize = stoul(value);
+        else if (key == "lag")
+            feedback.processingLag = stod(value);
+        else if (key == "recommendation")
+            feedback.rateRecommendation = value;
+        else if (key == "total_processed")
+            feedback.totalProcessed = stoull(value);
+    }
+    
+    return feedback;
 }

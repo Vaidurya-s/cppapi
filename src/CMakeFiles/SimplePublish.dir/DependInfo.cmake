@@ -8,7 +8,8 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/home/vaidurya/sttp/cppapi/src/samples/SimplePublish/SimplePublish.cpp" "src/CMakeFiles/SimplePublish.dir/samples/SimplePublish/SimplePublish.cpp.o" "gcc" "src/CMakeFiles/SimplePublish.dir/samples/SimplePublish/SimplePublish.cpp.o.d"
+  "/home/runner/work/cppapi/cppapi/src/samples/SimplePublish/SimplePublish.cpp" "src/CMakeFiles/SimplePublish.dir/samples/SimplePublish/SimplePublish.cpp.o" "gcc" "src/CMakeFiles/SimplePublish.dir/samples/SimplePublish/SimplePublish.cpp.o.d"
+  "" "src/Samples/SimplePublish" "gcc" "src/CMakeFiles/SimplePublish.dir/link.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

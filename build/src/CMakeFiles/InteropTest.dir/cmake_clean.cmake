@@ -1,4 +1,5 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/InteropTest.dir/link.d"
   "CMakeFiles/InteropTest.dir/samples/InteropTest/InteropTest.cpp.o"
   "CMakeFiles/InteropTest.dir/samples/InteropTest/InteropTest.cpp.o.d"
   "CMakeFiles/InteropTest.dir/samples/InteropTest/SubscriberHandler.cpp.o"
