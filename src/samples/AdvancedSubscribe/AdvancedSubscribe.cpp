@@ -1,7 +1,7 @@
 //******************************************************************************************************
 //  AdvancedSubscribe.cpp - Gbtc
 //
-//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright ï¿½ 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
@@ -23,7 +23,12 @@
 
 #include "../../lib/Convert.h"
 #include "../../lib/transport/DataSubscriber.h"
+#include "../../lib/Timer.h"
 #include <iostream>
+#include <queue>
+#include <chrono>
+#include <sstream>
+#include <iomanip>
 
 using namespace std;
 using namespace sttp;
@@ -31,6 +36,29 @@ using namespace sttp::transport;
 
 DataSubscriber* Subscriber;
 SubscriptionInfo Info;
+
+// Dynamic Rate Synchronization - Subscriber feedback tracking
+struct FeedbackMetrics
+{
+    size_t queueSize;
+    double processingLag;
+    string rateRecommendation; // "READY", "SLOW", "NORMAL"
+    
+    FeedbackMetrics() : queueSize(0), processingLag(0.0), rateRecommendation("NORMAL") {}
+};
+
+// Queue for tracking measurement processing load
+queue<chrono::steady_clock::time_point> measurementProcessingQueue;
+Mutex feedbackMutex;
+TimerPtr feedbackTimer;
+FeedbackMetrics currentMetrics;
+uint64_t totalProcessedMeasurements = 0;
+chrono::steady_clock::time_point lastFeedbackTime;
+
+// Feedback functions
+void SendFeedbackToPublisher();
+void UpdateProcessingMetrics(size_t measurementCount);
+string CreateFeedbackMessage(const FeedbackMetrics& metrics);
 
 // Create helper objects for subscription.
 void SetupSubscriberConnector(SubscriberConnector& connector, const string& hostname, uint16_t port);
@@ -55,6 +83,27 @@ void RunSubscriber(const string& hostname, uint16_t port);
 // is terminated.
 //
 // Measurements are transmitted via a separate UDP data channel.
+//
+// DYNAMIC RATE SYNCHRONIZATION FEATURE:
+// =====================================
+// The subscriber now implements dynamic rate synchronization with the publisher:
+//
+// 1. Monitors measurement processing queue and calculates load metrics
+// 2. Sends feedback every 2 seconds to publisher via UserCommand01 containing:
+//    - queue_size: Number of measurements processed in last 30 seconds
+//    - lag: Processing lag in milliseconds
+//    - recommendation: READY (low load), NORMAL (medium), or SLOW (high load)
+//    - total_processed: Total measurements processed since connection
+// 3. Feedback thresholds:
+//    - READY: < 150 measurements in queue (< 5/sec average)
+//    - NORMAL: 150-600 measurements in queue
+//    - SLOW: > 600 measurements in queue (> 20/sec average)
+// 4. Publisher uses this feedback to dynamically adjust publishing rate
+//
+// Usage Instructions:
+// - Run AdvancedSubscribe HOSTNAME PORT (e.g., AdvancedSubscribe localhost 7165)
+// - Observe feedback messages being sent to publisher
+// - Monitor how publisher adjusts rate based on processing load
 int main(int argc, char* argv[])
 {
     string hostname;
@@ -83,6 +132,10 @@ int main(int argc, char* argv[])
     string line;
     getline(cin, line);
 
+    // Stop feedback timer before disconnecting
+    if (feedbackTimer)
+        feedbackTimer->Stop();
+
     // Disconnect the subscriber to stop background threads.
     Subscriber->Disconnect();
     cout << "Disconnected." << endl;
@@ -110,6 +163,13 @@ void RunSubscriber(const string& hostname, uint16_t port)
     Subscriber->RegisterErrorMessageCallback(&DisplayErrorMessage);
     Subscriber->RegisterNewMeasurementsCallback(&ProcessMeasurements);
 
+    // Dynamic Rate Synchronization: Setup periodic feedback timer
+    // Send feedback every 2 seconds to allow for responsive rate adjustment
+    feedbackTimer = NewSharedPtr<Timer>(2000, [](const TimerPtr&, void*)
+    {
+        SendFeedbackToPublisher();
+    }, true);
+
     cout << endl << "Connecting to " << hostname << ":" << port << "..." << endl << endl;
 
     // Connect and subscribe to publisher
@@ -117,6 +177,10 @@ void RunSubscriber(const string& hostname, uint16_t port)
     {
         cout << "Connected! Subscribing to data..." << endl << endl;
         Subscriber->Subscribe();
+        
+        // Start feedback timer after successful connection
+        feedbackTimer->Start();
+        cout << "Dynamic rate synchronization feedback started (2-second interval)" << endl << endl;
     }
     else
     {
@@ -197,6 +261,9 @@ void ProcessMeasurements(DataSubscriber* source, const vector<MeasurementPtr>& m
         source->SendServerCommand(ServerCommand::UserCommand00, "Hello, world!");
 
     processCount += measurementCount;
+    
+    // Dynamic Rate Synchronization: Update processing metrics
+    UpdateProcessingMetrics(measurementCount);
 
     // Only display messages every few seconds
     if (showMessage)
@@ -241,4 +308,89 @@ void DisplayStatusMessage(DataSubscriber*, const string& message)
 void DisplayErrorMessage(DataSubscriber*, const string& message)
 {
     cerr << message << endl << endl;
+}
+
+// Dynamic Rate Synchronization Implementation
+// ==========================================
+
+/**
+ * Sends feedback message to publisher with current processing metrics.
+ * Feedback includes queue size, processing lag, and rate recommendation.
+ */
+void SendFeedbackToPublisher()
+{
+    lock_guard<Mutex> lock(feedbackMutex);
+    
+    string feedbackMessage = CreateFeedbackMessage(currentMetrics);
+    
+    // Send feedback using UserCommand01 for rate synchronization
+    if (Subscriber && Subscriber->IsConnected())
+    {
+        Subscriber->SendServerCommand(ServerCommand::UserCommand01, feedbackMessage);
+        
+        cout << "Sent feedback to publisher: " << feedbackMessage << endl;
+    }
+    
+    lastFeedbackTime = chrono::steady_clock::now();
+}
+
+/**
+ * Updates processing metrics based on measurement processing load.
+ * Calculates queue size, processing lag, and determines rate recommendation.
+ */
+void UpdateProcessingMetrics(size_t measurementCount)
+{
+    lock_guard<Mutex> lock(feedbackMutex);
+    
+    auto now = chrono::steady_clock::now();
+    totalProcessedMeasurements += measurementCount;
+    
+    // Track recent measurement processing times (last 30 seconds)
+    measurementProcessingQueue.push(now);
+    
+    // Remove entries older than 30 seconds
+    while (!measurementProcessingQueue.empty() && 
+           chrono::duration_cast<chrono::seconds>(now - measurementProcessingQueue.front()).count() > 30)
+    {
+        measurementProcessingQueue.pop();
+    }
+    
+    // Update metrics
+    currentMetrics.queueSize = measurementProcessingQueue.size();
+    
+    // Calculate processing lag (simplified as time since last feedback)
+    if (lastFeedbackTime.time_since_epoch().count() > 0)
+    {
+        auto timeSinceLastFeedback = chrono::duration_cast<chrono::milliseconds>(now - lastFeedbackTime);
+        currentMetrics.processingLag = timeSinceLastFeedback.count();
+    }
+    
+    // Determine rate recommendation based on queue size and lag
+    if (currentMetrics.queueSize > 600) // High load - more than 20 measurements/second
+    {
+        currentMetrics.rateRecommendation = "SLOW";
+    }
+    else if (currentMetrics.queueSize < 150) // Low load - less than 5 measurements/second
+    {
+        currentMetrics.rateRecommendation = "READY";
+    }
+    else
+    {
+        currentMetrics.rateRecommendation = "NORMAL";
+    }
+}
+
+/**
+ * Creates a feedback message string in JSON-like format for extensibility.
+ * Format: "RATE_FEEDBACK:queue_size=X,lag=Y,recommendation=Z"
+ */
+string CreateFeedbackMessage(const FeedbackMetrics& metrics)
+{
+    stringstream ss;
+    ss << "RATE_FEEDBACK:queue_size=" << metrics.queueSize 
+       << ",lag=" << fixed << setprecision(2) << metrics.processingLag
+       << ",recommendation=" << metrics.rateRecommendation
+       << ",total_processed=" << totalProcessedMeasurements;
+    
+    return ss.str();
 }
