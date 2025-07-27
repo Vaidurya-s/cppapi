@@ -56,6 +56,7 @@
 
 #include <boost/any.hpp>
 #include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_hash.hpp>
 #include <boost/exception/exception.hpp>
 #include <boost/multiprecision/cpp_dec_float.hpp>
 #include <boost/thread.hpp>
