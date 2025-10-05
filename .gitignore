@@ -329,3 +329,30 @@ ASALocalRun/
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
 /src/enc_temp_folder/
+
+# Linux/CMake/GCC Build Artifacts
+build/
+*.o
+*.a
+*.so
+*.dylib
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Generated executables and libraries
+src/Samples/*/
+!src/Samples/*.cpp
+!src/Samples/*.h
+!src/Samples/**/
+src/Libraries/
+
+# Swap files
+*.swp
+*.swo

@@ -1,7 +1,7 @@
 #******************************************************************************************************
 #  CMakeLists.txt - Gbtc
 #
-#  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
+#  Copyright ï¿½ 2019, Grid Protection Alliance.  All Rights Reserved.
 #
 #  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 #  the NOTICE file distributed with this work for additional information regarding copyright ownership.
@@ -519,6 +519,10 @@ target_link_libraries (SimplePublish sttp)
 add_executable (SimpleSubscribe EXCLUDE_FROM_ALL samples/SimpleSubscribe/SimpleSubscribe.cpp)
 target_link_libraries (SimpleSubscribe sttp)
 
+# Add this after the other sample executables ### NEW ADDITIONS ABOVE THIS LINE ###
+add_executable (BasicPublish EXCLUDE_FROM_ALL samples/cmake_test/BasicPublish.cpp)
+target_link_libraries (BasicPublish sttp)
+
 # Build with 'make samples'
 add_custom_target (samples DEPENDS 
     AdvancedPublish
@@ -534,4 +538,7 @@ add_custom_target (samples DEPENDS
     ReverseSubscribe
     SimpleSubscribe
     SimplePublish
+    ##############################################
+    # Add this after the other sample executables ### NEW ADDITIONS BELOW THIS LINE ###
+    BasicPublish
 )

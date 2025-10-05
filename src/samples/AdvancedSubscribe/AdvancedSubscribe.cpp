@@ -1,7 +1,7 @@
 //******************************************************************************************************
 //  AdvancedSubscribe.cpp - Gbtc
 //
-//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright ï¿½ 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
@@ -188,32 +188,23 @@ void SetupSubscriberConnector(SubscriberConnector& connector, const string& host
 void ProcessMeasurements(DataSubscriber* source, const vector<MeasurementPtr>& measurements)
 {
     static uint64_t processCount = 0;
-    static constexpr uint64_t interval = 5ULL * 60ULL;
     const uint64_t measurementCount = measurements.size();
-    const bool showMessage = (processCount + measurementCount >= (processCount / interval + 1) * interval);
-
-    // Send a custom command to publisher upon receiving first measurement
-    if (processCount == 0)
-        source->SendServerCommand(ServerCommand::UserCommand00, "Hello, world!");
 
     processCount += measurementCount;
 
-    // Only display messages every few seconds
-    if (showMessage)
-    {
-        stringstream message;
+    // Print every measurement batch (remove the throttling)
+    stringstream message;
+    
+    message << "Batch " << processCount/measurementCount << ": " << measurementCount << " measurements" << endl;
+    message << "Total received: " << source->GetTotalMeasurementsReceived() << endl;
+    message << "Timestamp: " << ToString(measurements[0]->GetDateTime()) << endl;
+    message << "\tPoint\tValue" << endl;
 
-        message << source->GetTotalMeasurementsReceived() << " measurements received so far..." << endl;
-        message << "Timestamp: " << ToString(measurements[0]->GetDateTime()) << endl;
-        message << "\tPoint\tValue" << endl;
+    for (const auto& measurement : measurements)
+        message << '\t' << measurement->ID << '\t' << measurement->Value << endl;
 
-        for (const auto& measurement : measurements)
-            message << '\t' << measurement->ID << '\t' << measurement->Value << endl;
-
-        message << endl;
-
-        cout << message.str();
-    }
+    message << endl;
+    cout << message.str();
 }
 
 // Callback that is called when the subscriber auto-reconnects.

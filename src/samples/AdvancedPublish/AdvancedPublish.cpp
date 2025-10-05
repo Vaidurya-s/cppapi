@@ -1,7 +1,7 @@
 //******************************************************************************************************
 //  AdvancedPublish.cpp - Gbtc
 //
-//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright ï¿½ 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
@@ -27,6 +27,8 @@
 #include "GenHistory.h"
 #include "TemporalSubscriber.h"
 #include <iostream>
+#include <fstream>
+#include <sstream>
 
 using namespace std;
 using namespace sttp;
@@ -241,11 +243,48 @@ bool RunPublisher(const uint16_t port, const bool genHistory)
         cout << endl;
 
         // Setup data publication timer - for this publishing sample we send
-        // data type reasonable random values every 33 milliseconds
+        // data from CSV file every 33 milliseconds
         PublishTimer = NewSharedPtr<Timer>(33, [](const TimerPtr&, void*)
         {
-            // If metadata can change, the following integer should not be static:
             static uint32_t count = ConvertUInt32(MeasurementsToPublish.size());
+            static vector<vector<float64_t>> csvData;
+            static size_t csvRowIndex = 0;
+            static bool csvLoaded = false;
+            
+            // Load CSV data once
+            if (!csvLoaded)
+            {
+                ifstream file("datasheet.csv");
+                string line;
+                
+                if (file.is_open())
+                {
+                    while (getline(file, line))
+                    {
+                        vector<float64_t> row;
+                        stringstream ss(line);
+                        string cell;
+                        
+                        while (getline(ss, cell, ','))
+                        {
+                            try {
+                                row.push_back(stod(cell));
+                            } catch (...) {
+                                row.push_back(0.0); // Default value for invalid data
+                            }
+                        }
+                        csvData.push_back(row);
+                    }
+                    file.close();
+                    csvLoaded = true;
+                }
+                else
+                {
+                    cout << "Warning: Could not open datasheet.csv, using default values" << endl;
+                    csvLoaded = true; // Prevent repeated attempts
+                }
+            }
+            
             const int64_t timestamp = RoundToSubsecondDistribution(ToTicks(UtcNow()), 30);
             vector<MeasurementPtr> measurements;
 
@@ -260,32 +299,70 @@ bool RunPublisher(const uint16_t port, const bool genHistory)
                 measurement->SignalID = metadata->SignalID;
                 measurement->Timestamp = timestamp;
 
-                const float64_t randFraction = rand() / randMax;
-                const float64_t sign = randFraction > 0.5 ? 1.0 : -1.0;
-                float64_t value;
-
-                switch (metadata->Reference.Kind)  // NOLINT
+                float64_t value = 0.0;
+                
+                // Get value from CSV data if available
+                if (!csvData.empty() && csvRowIndex < csvData.size())
                 {
-                    case SignalKind::Frequency:
-                        value = 60.0 + sign * randFraction * 0.1;
-                        break;
-                    case SignalKind::DfDt:
-                        value = sign * randFraction * 2;
-                        break;
-                    case SignalKind::Magnitude:
-                        value = 500 + sign * randFraction * 50;
-                        break;
-                    case SignalKind::Angle:
-                        value = sign * randFraction * 180;
-                        break;
-                    default:
-                        value = sign * randFraction * UInt32::MaxValue;
-                        break;
+                    const vector<float64_t>& currentRow = csvData[csvRowIndex];
+                    if (i < currentRow.size())
+                    {
+                        value = currentRow[i];
+                    }
+                    else
+                    {
+                        // Default values if CSV doesn't have enough columns
+                        switch (metadata->Reference.Kind)
+                        {
+                            case SignalKind::Frequency:
+                                value = 60.0;
+                                break;
+                            case SignalKind::DfDt:
+                                value = 0.0;
+                                break;
+                            case SignalKind::Magnitude:
+                                value = 500.0;
+                                break;
+                            case SignalKind::Angle:
+                                value = 0.0;
+                                break;
+                            default:
+                                value = 0.0;
+                                break;
+                        }
+                    }
+                }
+                else
+                {
+                    // Default values if no CSV data
+                    switch (metadata->Reference.Kind)
+                    {
+                        case SignalKind::Frequency:
+                            value = 60.0;
+                            break;
+                        case SignalKind::DfDt:
+                            value = 0.0;
+                            break;
+                        case SignalKind::Magnitude:
+                            value = 500.0;
+                            break;
+                        case SignalKind::Angle:
+                            value = 0.0;
+                            break;
+                        default:
+                            value = 0.0;
+                            break;
+                    }
                 }
 
                 measurement->Value = value;
-
                 measurements.push_back(measurement);
+            }
+            
+            // Move to next row in CSV, cycle back to beginning if at end
+            if (!csvData.empty())
+            {
+                csvRowIndex = (csvRowIndex + 1) % csvData.size();
             }
 
             // Publish measurements
