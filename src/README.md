@@ -1,11 +1,99 @@
-# Implementation of the Streaming Telemetry Transport Protocol (STTP) in C++.
+# Building the STTP C++ API
 
-Code includes STTP functionality for both "subscribers" and "publishers".
+> Implementation of the Streaming Telemetry Transport Protocol (STTP) in C++.
+> Code includes STTP functionality for both "subscribers" and "publishers".
 
-Build instructions follow:
+---
 
-* [Windows](#compiling-in-visual-studio) (using [Visual Studio 2022](https://visualstudio.microsoft.com/vs/community/))
-* [Unix Variants](#compiling-in-linux) (using [CMake](https://cmake.org/))
+## Table of Contents
+
+- [Build Pipeline](#build-pipeline)
+- [Dependency Graph](#dependency-graph)
+- [Platform Support](#platform-support)
+- [Compiling in Visual Studio](#compiling-in-visual-studio)
+- [Compiling in Linux](#compiling-in-linux)
+- [Build Targets](#build-targets)
+
+---
+
+## Build Pipeline
+
+```mermaid
+flowchart TD
+    Start["Start"] --> Platform{"Platform?"}
+
+    Platform -->|"Windows"| VS["Visual Studio 2022"]
+    Platform -->|"Linux / Unix"| CMake["CMake Configuration"]
+
+    VS --> BoostWin["Install Boost<br/>(parallel directory)"]
+    BoostWin --> ZlibWin["Compile Boost<br/>with zlib source"]
+    ZlibWin --> BuildVS["Build in Visual Studio<br/>(Debug / Release)"]
+    BuildVS --> Done["Library + Samples Ready"]
+
+    CMake --> Deps["Install Dependencies<br/>(gcc, cmake, boost, zlib, bzip2)"]
+    Deps --> Configure["cmake . <br/>or cmake path/to/source"]
+    Configure --> BuildType{"Build Type?"}
+    BuildType -->|"Release"| Release["make -j6"]
+    BuildType -->|"Debug"| Debug["cmake -DCMAKE_BUILD_TYPE=Debug<br/>make -j6"]
+    Release --> Done
+    Debug --> Done
+
+    Done --> Install["make install<br/>(optional)"]
+
+    style Start fill:#264653,color:#fff
+    style Done fill:#2a9d8f,color:#fff
+    style Install fill:#e76f51,color:#fff
+```
+
+---
+
+## Dependency Graph
+
+```mermaid
+graph TD
+    STTP["STTP Library<br/>(libsttp.a)"]
+
+    STTP --> BoostAsio["Boost.Asio<br/>(async I/O)"]
+    STTP --> BoostThread["Boost.Thread<br/>(threading)"]
+    STTP --> BoostIostreams["Boost.Iostreams<br/>(compression)"]
+    STTP --> BoostSystem["Boost.System<br/>(error codes)"]
+    STTP --> BoostUuid["Boost.Uuid<br/>(GUID generation)"]
+    STTP --> BoostBind["Boost.Bind<br/>(function binding)"]
+
+    BoostIostreams --> zlib["zlib<br/>(GZip compression)"]
+    BoostIostreams --> bzip2["bzip2<br/>(bzip2 compression)"]
+
+    STTP --> pugixml["pugixml<br/>(embedded XML parser)"]
+    STTP --> ANTLR4["ANTLR4 Runtime<br/>(embedded parser generator)"]
+    STTP --> UTF8["utf8-cpp<br/>(embedded UTF-8)"]
+
+    style STTP fill:#264653,color:#fff
+    style BoostAsio fill:#2a9d8f,color:#fff
+    style BoostThread fill:#2a9d8f,color:#fff
+    style BoostIostreams fill:#2a9d8f,color:#fff
+    style BoostSystem fill:#2a9d8f,color:#fff
+    style BoostUuid fill:#2a9d8f,color:#fff
+    style BoostBind fill:#2a9d8f,color:#fff
+    style zlib fill:#e9c46a,color:#000
+    style bzip2 fill:#e9c46a,color:#000
+    style pugixml fill:#f4a261,color:#000
+    style ANTLR4 fill:#f4a261,color:#000
+    style UTF8 fill:#f4a261,color:#000
+```
+
+> **Embedded** dependencies (pugixml, ANTLR4 runtime, utf8-cpp) are included in the source tree and require no separate installation.
+
+---
+
+## Platform Support
+
+| Platform | Compiler | Boost Versions | Build System | Standard |
+|----------|----------|----------------|--------------|----------|
+| Windows | Visual Studio 2022 | 1.66, 1.71, 1.74, 1.75, 1.80 | VS Solution | C++20 |
+| Linux (Ubuntu) | gcc 10.2+ | 1.80.0 | CMake 2.8+ | C++20 |
+| Unix variants | gcc 10.2+ | 1.80.0 | CMake 2.8+ | C++20 |
+
+---
 
 ## Compiling in Visual Studio
 
@@ -163,7 +251,65 @@ type the following command:
 ```bash
 make -j6 samples
 ```
-> Hint: You can start with samples and this will auto-build STTP library depdendency.
+> Hint: You can start with samples and this will auto-build STTP library dependency.
+
+### Installation
+
+At the top level of the build directory, type the following command.
+
+```bash
+make install
+```
+
+This will move the header files and the library file to the location
+specified during configuration. Header files go under the 'include/'
+subdirectory, and the library file goes under the 'lib/' subdirectory.
+
+---
+
+## Build Targets
+
+```mermaid
+graph TD
+    subgraph "Library"
+        STTP["sttp<br/>(core library)"]
+    end
+
+    subgraph "Sample Applications"
+        SP["SimplePublish"]
+        SS["SimpleSubscribe"]
+        AP["AdvancedPublish"]
+        AS["AdvancedSubscribe"]
+        IP["InstancePublish"]
+        IS["InstanceSubscribe"]
+        RP["ReversePublish"]
+        RS["ReverseSubscribe"]
+        DMP["DynamicMetadataPublish"]
+        LT["LatencyTest"]
+        AFC["AverageFrequencyCalculator"]
+        FET["FilterExpressionTests"]
+        IT["InteropTest"]
+    end
+
+    Samples["make samples<br/>(umbrella target)"]
+    Samples --> SP & SS & AP & AS & IP & IS & RP & RS & DMP & LT & AFC & FET & IT
+
+    SP & SS & AP & AS & IP & IS & RP & RS & DMP & LT & AFC & FET & IT --> STTP
+
+    style STTP fill:#264653,color:#fff
+    style Samples fill:#2a9d8f,color:#fff
+```
+
+### Quick Reference
+
+| Command | Description |
+|---------|-------------|
+| `cmake .` | Configure build (from source directory) |
+| `cmake -DCMAKE_BUILD_TYPE=Debug .` | Configure debug build |
+| `make -j6` | Build core library |
+| `make -j6 samples` | Build all samples (auto-builds library) |
+| `make SimpleSubscribe` | Build a single sample |
+| `make install` | Install headers and library |
 
 Individual sample applications can be built as follows:
 
@@ -183,14 +329,6 @@ make SimpleSubscribe
 make SimplePublish
 ```
 
-### Installation
+---
 
-At the top level of the build directory, type the following command.
-
-```bash
-make install
-```
-
-This will move the header files and the library file to the location
-specified during configuration. Header files go under the 'include/'
-subdirectory, and the library file goes under the 'lib/' subdirectory.
+*See also: [Architecture](../doc/Architecture.md) | [Sample Applications](../doc/Samples.md) | [Project README](../README.md)*
